@@ -196,7 +196,7 @@ flowchart TD
         D1 --> E1["Observe error<br/>→ Retry/guess<br/>(\"429?\", \"400?\")"]
         E1 --> F1["Maybe fix<br/>after loops<br/>(latency, tokens)"]
     end
-    
+
     subgraph "AgentSDK Approach"
         A2["AgentSDK<br/>(JSON Schema + semantics)"] --> B2["LLM sees tools<br/>(function defs)<br/>(token light)"]
         B2 --> C2["Emit structured call<br/>(JSON args per schema)"]
@@ -205,7 +205,7 @@ flowchart TD
         E2 --> F2["Structured error surface<br/>(\"rate_limit; wait=60s\")"]
         F2 --> G2["Complete task sooner<br/>(fewer tokens/loops)"]
     end
-    
+
     style A1 fill:#ffebee
     style A2 fill:#e8f5e8
     style F1 fill:#ffcdd2
