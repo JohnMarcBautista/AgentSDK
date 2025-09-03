@@ -185,45 +185,29 @@ For commercial licensing, enterprise support, or consulting services, please con
 
 **AgentSDK** - Making APIs speak the language of AI agents.
 
-┌────────────────────────────┐ ┌────────────────────────────┐
-│ Normal API Docs │ │ AgentSDK │
-│ (Markdown / HTML / PDF) │ │ (JSON Schema + semantics) │
-└─────────────┬──────────────┘ └─────────────┬──────────────┘
-│ │
-▼ ▼
-┌─────────────────┐ ┌─────────────────┐
-│ LLM reads text │ │ LLM sees tools │
-│ + retrieves │ │ (function defs) │
-│ (token heavy) │ │ (tokenlight) │
-└────────┬────────┘ └────────┬────────┘
-│ │
-▼ ▼
-┌─────────────────┐ ┌──────────────────────────┐
-│ Infer intent │ (guess types, │ Emit structured call │
-│ & parameters │ defaults, flows) │ (JSON args per schema) │
-└────────┬────────┘ └───────────┬──────────────┘
-│ │
-▼ ▼
-┌─────────────────┐ ┌──────────────────────────┐
-│ Call API │ (often malformed) │ Validate args w/ schema │
-│ (trial & error)│ │ (reject invalid early) │
-└────────┬────────┘ └───────────┬──────────────┘
-│ │
-▼ ▼
-┌─────────────────┐ ┌──────────────────────────┐
-│ Observe error │ (“429?”, “400?”) │ Execute w/ guardrails │
-│ → Retry/guess │ │ (retries, timeouts, │
-└────────┬────────┘ │ preconditions) │
-│ └───────────┬──────────────┘
-▼ │
-┌─────────────────┐ ▼
-│ Maybe fix │ ┌──────────────────────────┐
-│ after loops │ (latency, tokens) │ Structured error surface │
-└─────────────────┘ │ (“rate_limit; wait=60s”) │
-└───────────┬──────────────┘
-│
-▼
-┌──────────────────────────┐
-│ Complete task sooner │
-│ (fewer tokens/loops) │
-└──────────────────────────┘
+## 🔄 Normal API Docs vs AgentSDK Comparison
+
+```mermaid
+flowchart TD
+    subgraph "Traditional Approach"
+        A1["Normal API Docs<br/>(Markdown / HTML / PDF)"] --> B1["LLM reads text<br/>+ retrieves<br/>(token heavy)"]
+        B1 --> C1["Infer intent<br/>& parameters<br/>(guess types, defaults, flows)"]
+        C1 --> D1["Call API<br/>(trial & error)<br/>(often malformed)"]
+        D1 --> E1["Observe error<br/>→ Retry/guess<br/>(\"429?\", \"400?\")"]
+        E1 --> F1["Maybe fix<br/>after loops<br/>(latency, tokens)"]
+    end
+    
+    subgraph "AgentSDK Approach"
+        A2["AgentSDK<br/>(JSON Schema + semantics)"] --> B2["LLM sees tools<br/>(function defs)<br/>(token light)"]
+        B2 --> C2["Emit structured call<br/>(JSON args per schema)"]
+        C2 --> D2["Validate args w/ schema<br/>(reject invalid early)"]
+        D2 --> E2["Execute w/ guardrails<br/>(retries, timeouts,<br/>preconditions)"]
+        E2 --> F2["Structured error surface<br/>(\"rate_limit; wait=60s\")"]
+        F2 --> G2["Complete task sooner<br/>(fewer tokens/loops)"]
+    end
+    
+    style A1 fill:#ffebee
+    style A2 fill:#e8f5e8
+    style F1 fill:#ffcdd2
+    style G2 fill:#c8e6c9
+```
