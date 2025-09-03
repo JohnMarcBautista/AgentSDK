@@ -175,7 +175,11 @@ We welcome contributions! Please see our [Contributing Guide](./CONTRIBUTING.md)
 
 ## 📄 License
 
-MIT License - see [LICENSE](./LICENSE) for details.
+This project is licensed under the AgentSDK License (ASL) - see [LICENSE](./LICENSE) for details.
+
+**TL;DR**: Free for non-commercial use (research, education, open source projects). Commercial use requires a separate license.
+
+For commercial licensing, enterprise support, or consulting services, please contact us.
 
 ---
 
