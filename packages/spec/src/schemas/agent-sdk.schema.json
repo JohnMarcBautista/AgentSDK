@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://agent-sdk.dev/schemas/agent-sdk.schema.json",
-  "title": "AgentSDK v0.1",
-  "description": "Agent-First SDK specification for optimized API consumption",
+  "title": "AgentSDK v0.2",
+  "description": "Agent-First SDK specification with hybrid execution and advanced semantics",
   "type": "object",
   "properties": {
     "name": {
@@ -70,24 +70,114 @@
       },
       "description": "Common mistakes to avoid"
     },
-    "x-metadata": {
+    "x-provenance": {
       "type": "object",
       "properties": {
-        "source": {
+        "sourceUrl": {
           "type": "string",
-          "description": "Source of the original API specification"
+          "format": "uri",
+          "description": "Original API specification URL"
         },
-        "convertedAt": {
+        "sourceHash": {
+          "type": "string",
+          "pattern": "^(sha256|md5):[a-fA-F0-9]+$",
+          "description": "Hash of the source specification for drift detection"
+        },
+        "generatedAt": {
           "type": "string",
           "format": "date-time",
           "description": "When this AgentSDK was generated"
+        },
+        "agentSdkVersion": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+(-[a-zA-Z0-9-]+)?$",
+          "description": "Version of AgentSDK spec used"
         },
         "enrichedAt": {
           "type": "string",
           "format": "date-time",
           "description": "When semantic enrichment was last applied"
+        },
+        "toolchain": {
+          "type": "object",
+          "properties": {
+            "converter": {
+              "type": "string",
+              "description": "Converter tool and version used"
+            },
+            "enricher": {
+              "type": "string",
+              "description": "Enricher tool and version used"
+            }
+          },
+          "additionalProperties": true
         }
       },
+      "required": ["generatedAt", "agentSdkVersion"],
+      "additionalProperties": false
+    },
+    "x-profiles": {
+      "type": "object",
+      "patternProperties": {
+        "^[a-zA-Z][a-zA-Z0-9_-]*$": {
+          "type": "object",
+          "properties": {
+            "description": {
+              "type": "string",
+              "description": "Profile description"
+            },
+            "operations": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Operation IDs included in this profile"
+            },
+            "usagePatterns": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Usage patterns relevant to this profile"
+            }
+          },
+          "required": ["operations"],
+          "additionalProperties": false
+        }
+      },
+      "description": "Operation profiles for dynamic toolset loading"
+    },
+    "x-wellKnown": {
+      "type": "object",
+      "properties": {
+        "endpoint": {
+          "type": "string",
+          "format": "uri-reference",
+          "default": "/.well-known/agentsdk.json",
+          "description": "Well-known endpoint for capability discovery"
+        },
+        "versions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^\\d+\\.\\d+\\.\\d+(-[a-zA-Z0-9-]+)?$"
+          },
+          "description": "Supported AgentSDK versions"
+        },
+        "deprecated": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^\\d+\\.\\d+\\.\\d+(-[a-zA-Z0-9-]+)?$"
+          },
+          "description": "Deprecated versions with sunset dates"
+        }
+      },
+      "additionalProperties": false
+    },
+    "x-metadata": {
+      "type": "object",
+      "description": "Additional metadata for tooling and documentation",
       "additionalProperties": true
     }
   },
@@ -158,30 +248,147 @@
         "preconditions": {
           "type": "array",
           "items": {
-            "type": "string"
+            "type": "object",
+            "properties": {
+              "condition": {
+                "type": "string",
+                "description": "Condition expression (e.g., 'user.authenticated', 'user.hasRole(admin)')"
+              },
+              "message": {
+                "type": "string",
+                "description": "Error message if condition fails"
+              },
+              "escalation": {
+                "enum": ["block", "warn", "human-review"],
+                "default": "block",
+                "description": "Action when precondition fails"
+              }
+            },
+            "required": ["condition"],
+            "additionalProperties": false
           },
           "description": "Conditions that must be met before calling"
         },
         "rateLimit": {
-          "type": "string",
-          "pattern": "^\\d+/(second|minute|hour|day)$",
-          "description": "Rate limit specification"
+          "type": "object",
+          "properties": {
+            "requests": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Number of requests allowed"
+            },
+            "window": {
+              "type": "string",
+              "pattern": "^\\d+[smhd]$",
+              "description": "Time window (e.g., '1m', '1h', '1d')"
+            },
+            "scope": {
+              "enum": ["global", "user", "ip", "operation"],
+              "default": "global",
+              "description": "Rate limit scope"
+            },
+            "backoffStrategy": {
+              "enum": ["exponentialBackoff", "linearBackoff", "fixedDelay"],
+              "default": "exponentialBackoff",
+              "description": "Backoff strategy when rate limited"
+            }
+          },
+          "required": ["requests", "window"],
+          "additionalProperties": false,
+          "description": "Rate limiting configuration"
         },
         "retry": {
-          "enum": ["none", "exponentialBackoff", "linearBackoff"],
-          "description": "Retry strategy for failures"
+          "type": "object",
+          "properties": {
+            "strategy": {
+              "enum": ["none", "exponentialBackoff", "linearBackoff", "fixedDelay"],
+              "default": "exponentialBackoff",
+              "description": "Retry strategy for failures"
+            },
+            "maxRetries": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 10,
+              "default": 3,
+              "description": "Maximum number of retry attempts"
+            },
+            "initialDelayMs": {
+              "type": "integer",
+              "minimum": 100,
+              "maximum": 30000,
+              "default": 1000,
+              "description": "Initial delay before first retry"
+            },
+            "maxDelayMs": {
+              "type": "integer",
+              "minimum": 1000,
+              "maximum": 300000,
+              "default": 30000,
+              "description": "Maximum delay between retries"
+            },
+            "jitter": {
+              "type": "boolean",
+              "default": true,
+              "description": "Add random jitter to prevent thundering herd"
+            }
+          },
+          "additionalProperties": false
         },
         "timeout": {
           "type": "integer",
           "minimum": 1000,
           "maximum": 300000,
+          "default": 30000,
           "description": "Request timeout in milliseconds"
         },
-        "maxRetries": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 10,
-          "description": "Maximum number of retry attempts"
+        "sideEffects": {
+          "enum": ["none", "read", "write", "destructive"],
+          "default": "read",
+          "description": "Side effect classification for safety"
+        },
+        "cost": {
+          "type": "object",
+          "properties": {
+            "tokens": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Estimated token cost"
+            },
+            "credits": {
+              "type": "number",
+              "minimum": 0,
+              "description": "Estimated monetary cost"
+            },
+            "complexity": {
+              "enum": ["low", "medium", "high"],
+              "description": "Computational complexity hint"
+            }
+          },
+          "additionalProperties": false,
+          "description": "Cost hints for operation planning"
+        },
+        "circuitBreaker": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false,
+              "description": "Enable circuit breaker pattern"
+            },
+            "failureThreshold": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 5,
+              "description": "Failures before opening circuit"
+            },
+            "recoveryTimeout": {
+              "type": "integer",
+              "minimum": 1000,
+              "default": 60000,
+              "description": "Time before attempting recovery"
+            }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false
@@ -194,25 +401,95 @@
           "type": "string",
           "description": "Error code or HTTP status"
         },
+        "httpStatus": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 599,
+          "description": "HTTP status code"
+        },
         "message": {
           "type": "string",
-          "description": "Error message pattern"
+          "description": "Error message pattern or regex"
         },
         "retryable": {
           "type": "boolean",
+          "default": false,
           "description": "Whether this error should trigger a retry"
+        },
+        "backoffStrategy": {
+          "enum": ["exponentialBackoff", "linearBackoff", "fixedDelay", "none"],
+          "default": "exponentialBackoff",
+          "description": "Backoff strategy for retries"
         },
         "recoveryHint": {
           "type": "string",
           "maxLength": 500,
-          "description": "Hint for recovering from this error"
+          "description": "Machine-readable recovery hint with placeholders"
+        },
+        "humanMessage": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Human-friendly error message"
         },
         "category": {
-          "enum": ["auth", "validation", "rate_limit", "server_error", "network", "not_found"],
+          "enum": ["auth", "validation", "rate_limit", "server_error", "network", "not_found", "quota", "permission", "timeout", "unknown"],
           "description": "Error category for handling logic"
+        },
+        "escalation": {
+          "enum": ["retry", "abort", "human-review", "fallback"],
+          "default": "abort",
+          "description": "Escalation strategy when recovery fails"
+        },
+        "context": {
+          "type": "object",
+          "properties": {
+            "retryAfter": {
+              "type": "string",
+              "description": "Retry-After header pattern or seconds"
+            },
+            "quotaReset": {
+              "type": "string",
+              "description": "When quota resets (timestamp or duration)"
+            },
+            "supportUrl": {
+              "type": "string",
+              "format": "uri",
+              "description": "URL for additional help"
+            },
+            "requiredFields": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Fields that need correction for validation errors"
+            }
+          },
+          "additionalProperties": true,
+          "description": "Additional context for error recovery"
+        },
+        "examples": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "input": {
+                "description": "Input that triggers this error"
+              },
+              "response": {
+                "description": "Expected error response"
+              },
+              "recovery": {
+                "type": "string",
+                "description": "How to recover from this specific case"
+              }
+            },
+            "required": ["response"],
+            "additionalProperties": false
+          },
+          "description": "Example error scenarios and recoveries"
         }
       },
-      "required": ["code"],
+      "required": ["code", "category"],
       "additionalProperties": false
     },
     
@@ -230,14 +507,142 @@
         "steps": {
           "type": "array",
           "items": {
-            "type": "string"
+            "type": "object",
+            "properties": {
+              "opId": {
+                "type": "string",
+                "description": "Operation ID to execute"
+              },
+              "description": {
+                "type": "string",
+                "description": "What this step accomplishes"
+              },
+              "condition": {
+                "type": "string",
+                "description": "Condition for executing this step"
+              },
+              "inputMapping": {
+                "type": "object",
+                "description": "How to map inputs from previous steps",
+                "additionalProperties": true
+              },
+              "outputCapture": {
+                "type": "object",
+                "properties": {
+                  "variables": {
+                    "type": "object",
+                    "description": "Variables to capture from response",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "additionalProperties": false
+              },
+              "errorHandling": {
+                "type": "object",
+                "properties": {
+                  "strategy": {
+                    "enum": ["abort", "continue", "retry", "fallback"],
+                    "default": "abort",
+                    "description": "How to handle errors in this step"
+                  },
+                  "fallbackStep": {
+                    "type": "string",
+                    "description": "Alternative step if this fails"
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "required": ["opId"],
+            "additionalProperties": false
           },
           "minItems": 2,
-          "description": "Sequence of operation IDs or descriptions"
+          "description": "Sequence of operations with flow control"
         },
-        "condition": {
-          "type": "string",
-          "description": "When to use this pattern"
+        "preconditions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Conditions that must be met to use this pattern"
+        },
+        "postconditions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Expected state after successful completion"
+        },
+        "cost": {
+          "type": "object",
+          "properties": {
+            "tokens": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Estimated total token cost"
+            },
+            "credits": {
+              "type": "number",
+              "minimum": 0,
+              "description": "Estimated total monetary cost"
+            },
+            "timeEstimate": {
+              "type": "string",
+              "description": "Estimated execution time (e.g., '30s', '2m')"
+            }
+          },
+          "additionalProperties": false,
+          "description": "Cost estimates for this pattern"
+        },
+        "alternatives": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Alternative pattern name"
+              },
+              "condition": {
+                "type": "string",
+                "description": "When to use this alternative"
+              },
+              "costComparison": {
+                "type": "string",
+                "description": "Cost comparison with main pattern"
+              }
+            },
+            "required": ["name"],
+            "additionalProperties": false
+          },
+          "description": "Alternative patterns that accomplish similar goals"
+        },
+        "examples": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Example scenario name"
+              },
+              "inputs": {
+                "type": "object",
+                "description": "Initial inputs for the pattern",
+                "additionalProperties": true
+              },
+              "expectedOutputs": {
+                "type": "object",
+                "description": "Expected final outputs",
+                "additionalProperties": true
+              }
+            },
+            "required": ["name", "inputs"],
+            "additionalProperties": false
+          },
+          "description": "Example executions of this pattern"
         }
       },
       "required": ["name", "steps"],

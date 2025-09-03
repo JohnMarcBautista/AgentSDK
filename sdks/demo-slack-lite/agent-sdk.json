@@ -1,0 +1,844 @@
+{
+  "name": "SlackLite",
+  "version": "0.2.0",
+  "baseUrl": "https://slack.com/api",
+  "auth": {
+    "modes": ["bearer"],
+    "headers": {
+      "Authorization": "Bearer {{token}}",
+      "Content-Type": "application/json"
+    }
+  },
+  "x-provenance": {
+    "sourceUrl": "https://api.slack.com/web",
+    "sourceHash": "sha256:b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4",
+    "generatedAt": "2025-01-15T12:00:00Z",
+    "agentSdkVersion": "0.2.0",
+    "toolchain": {
+      "converter": "@agent-sdk/converter-lite@0.2.0",
+      "enricher": "@agent-sdk/enricher@0.2.0"
+    }
+  },
+  "x-profiles": {
+    "basic": {
+      "description": "Basic messaging operations for simple bot interactions",
+      "operations": ["postMessage", "getChannelInfo"],
+      "usagePatterns": ["simpleMessage"]
+    },
+    "moderator": {
+      "description": "Channel moderation and management operations",
+      "operations": ["postMessage", "getChannelInfo", "getUserInfo", "createChannel", "inviteToChannel"],
+      "usagePatterns": ["channelSetup", "userOnboarding"]
+    },
+    "admin": {
+      "description": "Full administrative operations including user management",
+      "operations": ["postMessage", "getChannelInfo", "getUserInfo", "createChannel", "inviteToChannel", "listUsers", "setChannelTopic"],
+      "usagePatterns": ["channelSetup", "userOnboarding", "workspaceManagement"]
+    }
+  },
+  "x-wellKnown": {
+    "endpoint": "/.well-known/agentsdk.json",
+    "versions": ["0.1.0", "0.2.0"],
+    "deprecated": ["0.1.0"]
+  },
+  "operations": [
+    {
+      "opId": "postMessage",
+      "summary": "Send a message to a Slack channel",
+      "description": "Posts a message to a specified channel with support for rich formatting, attachments, and threading",
+      "method": "POST",
+      "path": "/chat.postMessage",
+      "input": {
+        "type": "object",
+        "properties": {
+          "channel": {
+            "type": "string",
+            "pattern": "^(#[a-z0-9-_]+|C[A-Z0-9]{8,})$",
+            "description": "Channel ID or name (e.g., '#general' or 'C1234567890')"
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 4000,
+            "description": "Message text (supports Slack markdown)"
+          },
+          "thread_ts": {
+            "type": "string",
+            "pattern": "^\\d+\\.\\d+$",
+            "description": "Timestamp of parent message for threading"
+          },
+
+          "username": {
+            "type": "string",
+            "maxLength": 80,
+            "description": "Bot username override"
+          },
+          "icon_emoji": {
+            "type": "string",
+            "pattern": "^:[a-z0-9_+-]+:$",
+            "description": "Emoji icon for the bot"
+          }
+        },
+        "required": ["channel", "text"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "description": "Success status"
+          },
+          "ts": {
+            "type": "string",
+            "description": "Message timestamp"
+          },
+          "channel": {
+            "type": "string",
+            "description": "Channel ID where message was posted"
+          },
+          "message": {
+            "type": "object",
+            "properties": {
+              "text": {"type": "string"},
+              "user": {"type": "string"},
+              "ts": {"type": "string"}
+            }
+          }
+        },
+        "required": ["ok"],
+        "additionalProperties": true
+      },
+      "x-guardrails": {
+        "preconditions": [
+          {
+            "condition": "auth.token.valid",
+            "message": "Valid Slack bot token required",
+            "escalation": "block"
+          },
+          {
+            "condition": "channel.exists",
+            "message": "Channel must exist and bot must have access",
+            "escalation": "human-review"
+          },
+          {
+            "condition": "text.length <= 4000 OR blocks.provided",
+            "message": "Message must have text (≤4000 chars) or blocks",
+            "escalation": "block"
+          }
+        ],
+        "rateLimit": {
+          "requests": 100,
+          "window": "1m",
+          "scope": "global",
+          "backoffStrategy": "exponentialBackoff"
+        },
+        "retry": {
+          "strategy": "exponentialBackoff",
+          "maxRetries": 3,
+          "initialDelayMs": 1000,
+          "maxDelayMs": 30000,
+          "jitter": true
+        },
+        "timeout": 10000,
+        "sideEffects": "write",
+        "cost": {
+          "tokens": 150,
+          "credits": 0.01,
+          "complexity": "medium"
+        },
+        "circuitBreaker": {
+          "enabled": true,
+          "failureThreshold": 5,
+          "recoveryTimeout": 60000
+        }
+      },
+      "x-errors": [
+        {
+          "code": "channel_not_found",
+          "httpStatus": 200,
+          "message": "Channel not found",
+          "retryable": false,
+          "recoveryHint": "Verify channel exists and bot has access: {channel}",
+          "humanMessage": "The specified channel doesn't exist or the bot lacks access",
+          "category": "not_found",
+          "escalation": "human-review",
+          "context": {
+            "supportUrl": "https://api.slack.com/methods/chat.postMessage#errors",
+            "requiredFields": ["channel"]
+          }
+        },
+        {
+          "code": "rate_limited",
+          "httpStatus": 429,
+          "message": "Rate limit exceeded",
+          "retryable": true,
+          "backoffStrategy": "exponentialBackoff",
+          "recoveryHint": "Rate limit exceeded, wait {retry_after} seconds",
+          "humanMessage": "Sending messages too quickly, please slow down",
+          "category": "rate_limit",
+          "escalation": "retry",
+          "context": {
+            "retryAfter": "60"
+          }
+        },
+        {
+          "code": "invalid_auth",
+          "httpStatus": 401,
+          "message": "Invalid authentication",
+          "retryable": false,
+          "recoveryHint": "Check bot token validity and permissions",
+          "humanMessage": "Bot authentication failed - token may be expired",
+          "category": "auth",
+          "escalation": "human-review",
+          "context": {
+            "supportUrl": "https://api.slack.com/authentication"
+          }
+        },
+        {
+          "code": "msg_too_long",
+          "httpStatus": 200,
+          "message": "Message text is too long",
+          "retryable": false,
+          "recoveryHint": "Truncate message to 4000 characters or use blocks",
+          "humanMessage": "Message exceeds 4000 character limit",
+          "category": "validation",
+          "escalation": "abort",
+          "context": {
+            "requiredFields": ["text"]
+          }
+        }
+      ]
+    },
+    {
+      "opId": "getChannelInfo",
+      "summary": "Get information about a Slack channel",
+      "description": "Retrieves detailed information about a channel including members, topic, and settings",
+      "method": "GET",
+      "path": "/conversations.info",
+      "input": {
+        "type": "object",
+        "properties": {
+          "channel": {
+            "type": "string",
+            "pattern": "^(#[a-z0-9-_]+|C[A-Z0-9]{8,})$",
+            "description": "Channel ID or name"
+          },
+          "include_locale": {
+            "type": "boolean",
+            "default": false,
+            "description": "Include locale information"
+          }
+        },
+        "required": ["channel"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "ok": {"type": "boolean"},
+          "channel": {
+            "type": "object",
+            "properties": {
+              "id": {"type": "string"},
+              "name": {"type": "string"},
+              "is_channel": {"type": "boolean"},
+              "is_private": {"type": "boolean"},
+              "is_member": {"type": "boolean"},
+              "topic": {
+                "type": "object",
+                "properties": {
+                  "value": {"type": "string"},
+                  "creator": {"type": "string"},
+                  "last_set": {"type": "number"}
+                }
+              },
+              "purpose": {
+                "type": "object",
+                "properties": {
+                  "value": {"type": "string"},
+                  "creator": {"type": "string"},
+                  "last_set": {"type": "number"}
+                }
+              },
+              "num_members": {"type": "number"}
+            }
+          }
+        },
+        "required": ["ok"],
+        "additionalProperties": true
+      },
+      "x-guardrails": {
+        "preconditions": [
+          {
+            "condition": "auth.token.valid",
+            "message": "Valid Slack bot token required"
+          }
+        ],
+        "rateLimit": {
+          "requests": 200,
+          "window": "1m",
+          "scope": "global"
+        },
+        "retry": {
+          "strategy": "exponentialBackoff",
+          "maxRetries": 2
+        },
+        "timeout": 5000,
+        "sideEffects": "read",
+        "cost": {
+          "tokens": 75,
+          "credits": 0.005,
+          "complexity": "low"
+        }
+      },
+      "x-errors": [
+        {
+          "code": "channel_not_found",
+          "httpStatus": 200,
+          "retryable": false,
+          "recoveryHint": "Verify channel exists: {channel}",
+          "category": "not_found",
+          "escalation": "abort"
+        }
+      ]
+    },
+    {
+      "opId": "getUserInfo",
+      "summary": "Get information about a Slack user",
+      "description": "Retrieves user profile information including display name, status, and timezone",
+      "method": "GET",
+      "path": "/users.info",
+      "input": {
+        "type": "object",
+        "properties": {
+          "user": {
+            "type": "string",
+            "pattern": "^U[A-Z0-9]{8,}$",
+            "description": "User ID (e.g., 'U1234567890')"
+          },
+          "include_locale": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "required": ["user"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "ok": {"type": "boolean"},
+          "user": {
+            "type": "object",
+            "properties": {
+              "id": {"type": "string"},
+              "name": {"type": "string"},
+              "real_name": {"type": "string"},
+              "profile": {
+                "type": "object",
+                "properties": {
+                  "display_name": {"type": "string"},
+                  "email": {"type": "string"},
+                  "status_text": {"type": "string"},
+                  "status_emoji": {"type": "string"}
+                }
+              },
+              "is_bot": {"type": "boolean"},
+              "is_admin": {"type": "boolean"},
+              "is_owner": {"type": "boolean"}
+            }
+          }
+        },
+        "required": ["ok"]
+      },
+      "x-guardrails": {
+        "rateLimit": {
+          "requests": 200,
+          "window": "1m"
+        },
+        "sideEffects": "read",
+        "cost": {
+          "tokens": 60,
+          "complexity": "low"
+        }
+      }
+    },
+    {
+      "opId": "createChannel",
+      "summary": "Create a new Slack channel",
+      "description": "Creates a new public or private channel with specified name and settings",
+      "method": "POST",
+      "path": "/conversations.create",
+      "input": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z0-9-_]{1,21}$",
+            "description": "Channel name (lowercase, no spaces, max 21 chars)"
+          },
+          "is_private": {
+            "type": "boolean",
+            "default": false,
+            "description": "Create as private channel"
+          }
+        },
+        "required": ["name"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "ok": {"type": "boolean"},
+          "channel": {
+            "type": "object",
+            "properties": {
+              "id": {"type": "string"},
+              "name": {"type": "string"},
+              "is_private": {"type": "boolean"},
+              "created": {"type": "number"}
+            }
+          }
+        }
+      },
+      "x-guardrails": {
+        "preconditions": [
+          {
+            "condition": "auth.permissions.channels:write",
+            "message": "Bot needs channels:write permission",
+            "escalation": "block"
+          },
+          {
+            "condition": "name.matches(/^[a-z0-9-_]{1,21}$/)",
+            "message": "Channel name must be lowercase, alphanumeric with dashes/underscores, max 21 chars",
+            "escalation": "block"
+          }
+        ],
+        "rateLimit": {
+          "requests": 20,
+          "window": "1m"
+        },
+        "sideEffects": "write",
+        "cost": {
+          "tokens": 100,
+          "credits": 0.02,
+          "complexity": "medium"
+        }
+      },
+      "x-errors": [
+        {
+          "code": "name_taken",
+          "httpStatus": 200,
+          "retryable": false,
+          "recoveryHint": "Choose a different channel name - '{name}' already exists",
+          "category": "validation",
+          "escalation": "human-review"
+        },
+        {
+          "code": "invalid_name",
+          "httpStatus": 200,
+          "retryable": false,
+          "recoveryHint": "Channel name must be lowercase, alphanumeric with dashes/underscores, max 21 chars",
+          "category": "validation",
+          "escalation": "abort"
+        }
+      ]
+    },
+    {
+      "opId": "inviteToChannel",
+      "summary": "Invite users to a Slack channel",
+      "description": "Invites one or more users to join a specified channel",
+      "method": "POST",
+      "path": "/conversations.invite",
+      "input": {
+        "type": "object",
+        "properties": {
+          "channel": {
+            "type": "string",
+            "pattern": "^(#[a-z0-9-_]+|C[A-Z0-9]{8,})$"
+          },
+          "users": {
+            "type": "string",
+            "pattern": "^U[A-Z0-9]{8,}(,U[A-Z0-9]{8,})*$",
+            "description": "Comma-separated list of user IDs"
+          }
+        },
+        "required": ["channel", "users"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "ok": {"type": "boolean"},
+          "channel": {
+            "type": "object",
+            "properties": {
+              "id": {"type": "string"}
+            }
+          }
+        }
+      },
+      "x-guardrails": {
+        "preconditions": [
+          {
+            "condition": "auth.permissions.channels:write",
+            "message": "Bot needs channels:write permission"
+          }
+        ],
+        "rateLimit": {
+          "requests": 50,
+          "window": "1m"
+        },
+        "sideEffects": "write",
+        "cost": {
+          "tokens": 120,
+          "complexity": "medium"
+        }
+      }
+    },
+    {
+      "opId": "listUsers",
+      "summary": "List users in the workspace",
+      "description": "Returns a list of all users in the workspace with pagination support",
+      "method": "GET",
+      "path": "/users.list",
+      "input": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000,
+            "default": 100
+          },
+          "cursor": {
+            "type": "string",
+            "description": "Pagination cursor"
+          }
+        },
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "ok": {"type": "boolean"},
+          "members": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {"type": "string"},
+                "name": {"type": "string"},
+                "real_name": {"type": "string"},
+                "is_bot": {"type": "boolean"}
+              }
+            }
+          },
+          "response_metadata": {
+            "type": "object",
+            "properties": {
+              "next_cursor": {"type": "string"}
+            }
+          }
+        }
+      },
+      "x-guardrails": {
+        "rateLimit": {
+          "requests": 100,
+          "window": "1m"
+        },
+        "sideEffects": "read",
+        "cost": {
+          "tokens": 200,
+          "complexity": "medium"
+        }
+      }
+    },
+    {
+      "opId": "setChannelTopic",
+      "summary": "Set the topic for a channel",
+      "description": "Updates the topic/description for a specified channel",
+      "method": "POST",
+      "path": "/conversations.setTopic",
+      "input": {
+        "type": "object",
+        "properties": {
+          "channel": {
+            "type": "string",
+            "pattern": "^(#[a-z0-9-_]+|C[A-Z0-9]{8,})$"
+          },
+          "topic": {
+            "type": "string",
+            "maxLength": 250,
+            "description": "New topic for the channel"
+          }
+        },
+        "required": ["channel", "topic"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "ok": {"type": "boolean"},
+          "topic": {"type": "string"}
+        }
+      },
+      "x-guardrails": {
+        "preconditions": [
+          {
+            "condition": "auth.permissions.channels:write",
+            "message": "Bot needs channels:write permission"
+          }
+        ],
+        "sideEffects": "write",
+        "cost": {
+          "tokens": 80,
+          "complexity": "low"
+        }
+      }
+    }
+  ],
+  "x-usagePatterns": [
+    {
+      "name": "simpleMessage",
+      "description": "Send a basic message to a channel",
+      "steps": [
+        {
+          "opId": "getChannelInfo",
+          "description": "Verify channel exists and bot has access",
+          "inputMapping": {
+            "channel": "{{targetChannel}}"
+          },
+          "outputCapture": {
+            "variables": {
+              "channelId": "$.channel.id",
+              "channelName": "$.channel.name"
+            }
+          },
+          "errorHandling": {
+            "strategy": "abort"
+          }
+        },
+        {
+          "opId": "postMessage",
+          "description": "Send the message to the verified channel",
+          "inputMapping": {
+            "channel": "{{channelId}}",
+            "text": "{{messageText}}"
+          },
+          "condition": "channelId != null",
+          "outputCapture": {
+            "variables": {
+              "messageTs": "$.ts",
+              "sentChannel": "$.channel"
+            }
+          }
+        }
+      ],
+      "preconditions": ["auth.valid", "channel.accessible"],
+      "postconditions": ["message.sent", "message.ts.captured"],
+      "cost": {
+        "tokens": 225,
+        "credits": 0.015,
+        "timeEstimate": "2-3s"
+      },
+      "examples": [
+        {
+          "name": "Welcome message",
+          "inputs": {
+            "targetChannel": "#general",
+            "messageText": "Hello team! 👋"
+          },
+          "expectedOutputs": {
+            "messageTs": "1234567890.123456",
+            "sentChannel": "C1234567890"
+          }
+        }
+      ]
+    },
+    {
+      "name": "channelSetup",
+      "description": "Create a new channel and configure it with topic and initial members",
+      "steps": [
+        {
+          "opId": "createChannel",
+          "description": "Create the new channel",
+          "inputMapping": {
+            "name": "{{channelName}}",
+            "is_private": "{{isPrivate || false}}"
+          },
+          "outputCapture": {
+            "variables": {
+              "newChannelId": "$.channel.id",
+              "createdName": "$.channel.name"
+            }
+          },
+          "errorHandling": {
+            "strategy": "abort"
+          }
+        },
+        {
+          "opId": "setChannelTopic",
+          "description": "Set the channel topic",
+          "condition": "newChannelId != null && channelTopic != null",
+          "inputMapping": {
+            "channel": "{{newChannelId}}",
+            "topic": "{{channelTopic}}"
+          },
+          "errorHandling": {
+            "strategy": "continue"
+          }
+        },
+        {
+          "opId": "inviteToChannel",
+          "description": "Invite initial members to the channel",
+          "condition": "newChannelId != null && initialMembers != null",
+          "inputMapping": {
+            "channel": "{{newChannelId}}",
+            "users": "{{initialMembers}}"
+          },
+          "errorHandling": {
+            "strategy": "continue"
+          }
+        },
+        {
+          "opId": "postMessage",
+          "description": "Send welcome message to new channel",
+          "inputMapping": {
+            "channel": "{{newChannelId}}",
+            "text": "Welcome to {{createdName}}! {{welcomeMessage || 'Let\\'s get started! 🚀'}}"
+          },
+          "errorHandling": {
+            "strategy": "continue"
+          }
+        }
+      ],
+      "preconditions": ["auth.channels:write", "channelName.valid"],
+      "postconditions": ["channel.created", "topic.set", "members.invited", "welcome.sent"],
+      "cost": {
+        "tokens": 450,
+        "credits": 0.05,
+        "timeEstimate": "5-8s"
+      },
+      "alternatives": [
+        {
+          "name": "simpleChannelCreate",
+          "condition": "no_initial_setup == true",
+          "costComparison": "60% cheaper, basic channel only"
+        }
+      ]
+    },
+    {
+      "name": "userOnboarding",
+      "description": "Onboard a new user by getting their info and sending welcome messages",
+      "steps": [
+        {
+          "opId": "getUserInfo",
+          "description": "Get user profile information",
+          "inputMapping": {
+            "user": "{{userId}}"
+          },
+          "outputCapture": {
+            "variables": {
+              "userName": "$.user.name",
+              "realName": "$.user.real_name",
+              "isBot": "$.user.is_bot"
+            }
+          }
+        },
+        {
+          "opId": "postMessage",
+          "description": "Send welcome message to general channel",
+          "condition": "isBot == false",
+          "inputMapping": {
+            "channel": "#general",
+            "text": "👋 Welcome to the team, {{realName || userName}}! We're excited to have you here."
+          },
+          "errorHandling": {
+            "strategy": "continue"
+          }
+        },
+        {
+          "opId": "inviteToChannel",
+          "description": "Invite user to onboarding channel",
+          "condition": "onboardingChannel != null",
+          "inputMapping": {
+            "channel": "{{onboardingChannel}}",
+            "users": "{{userId}}"
+          },
+          "errorHandling": {
+            "strategy": "continue"
+          }
+        }
+      ],
+      "cost": {
+        "tokens": 290,
+        "credits": 0.025,
+        "timeEstimate": "3-5s"
+      }
+    },
+    {
+      "name": "workspaceManagement",
+      "description": "Advanced workspace management including user listing and bulk operations",
+      "steps": [
+        {
+          "opId": "listUsers",
+          "description": "Get all workspace users",
+          "inputMapping": {
+            "limit": 1000
+          },
+          "outputCapture": {
+            "variables": {
+              "allUsers": "$.members",
+              "userCount": "$.members.length"
+            }
+          }
+        },
+        {
+          "opId": "getChannelInfo",
+          "description": "Get target channel information",
+          "inputMapping": {
+            "channel": "{{targetChannel}}"
+          },
+          "outputCapture": {
+            "variables": {
+              "channelInfo": "$.channel"
+            }
+          }
+        },
+        {
+          "opId": "postMessage",
+          "description": "Send management summary",
+          "inputMapping": {
+            "channel": "{{targetChannel}}",
+            "text": "📊 Workspace Summary: {{userCount}} users, managing channel: {{channelInfo.name}}"
+          }
+        }
+      ],
+      "preconditions": ["auth.admin_permissions"],
+      "cost": {
+        "tokens": 520,
+        "credits": 0.08,
+        "timeEstimate": "8-12s"
+      }
+    }
+  ],
+  "x-antiPatterns": [
+    "Don't send messages without verifying channel access first",
+    "Avoid creating channels with invalid names (use lowercase, alphanumeric, dashes, underscores only)",
+    "Never invite users to channels without checking if they exist first",
+    "Don't ignore rate limits - Slack has strict API quotas",
+    "Avoid sending very long messages without breaking them up or using blocks",
+    "Don't assume all users have the same permissions - check roles before operations",
+    "Never hardcode channel IDs - use channel names or dynamic lookup",
+    "Avoid posting in channels without considering timezone and user preferences"
+  ],
+  "x-metadata": {
+    "tags": ["slack", "messaging", "collaboration", "workspace", "bot"],
+    "documentation": "https://api.slack.com/web",
+    "support": "https://api.slack.com/support",
+    "lastUpdated": "2025-01-15T12:00:00Z",
+    "complexity": "high",
+    "realWorldAPI": true
+  }
+}

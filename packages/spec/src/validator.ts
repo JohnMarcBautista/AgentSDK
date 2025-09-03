@@ -185,12 +185,15 @@ export function validateUsagePatterns(sdk: AgentSDK): ValidationResult {
 
   for (const [patternIndex, pattern] of sdk["x-usagePatterns"].entries()) {
     for (const [stepIndex, step] of pattern.steps.entries()) {
-      // Check if step is an operation ID (simple heuristic: camelCase identifier)
-      if (/^[a-zA-Z][a-zA-Z0-9_]*$/.test(step) && !validOpIds.has(step)) {
+      // Handle both old string format and new object format
+      const opId = typeof step === 'string' ? step : step.opId;
+      
+      // Check if step references a valid operation ID
+      if (opId && /^[a-zA-Z][a-zA-Z0-9_]*$/.test(opId) && !validOpIds.has(opId)) {
         errors.push({
           path: `x-usagePatterns[${patternIndex}].steps[${stepIndex}]`,
-          message: `Usage pattern "${pattern.name}" references unknown operation ID: ${step}`,
-          value: step,
+          message: `Usage pattern "${pattern.name}" references unknown operation ID: ${opId}`,
+          value: opId,
         });
       }
     }

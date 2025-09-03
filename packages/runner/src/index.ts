@@ -25,23 +25,23 @@ async function retryWithBackoff<T>(
   baseDelay: number = 1000
 ): Promise<T> {
   let lastError: Error;
-  
+
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       return await fn();
     } catch (error) {
       lastError = error as Error;
-      
+
       if (attempt === maxRetries) {
         throw lastError;
       }
-      
+
       // Exponential backoff
       const delay = baseDelay * Math.pow(2, attempt);
-      await new Promise(resolve => setTimeout(resolve, delay));
+      await new Promise((resolve) => setTimeout(resolve, delay));
     }
   }
-  
+
   throw lastError!;
 }
 
@@ -199,9 +199,10 @@ export class AgentSDKRunner {
     onRetry?: (attempt: number) => void
   ): Promise<{ data: any; httpStatus: number }> {
     const guardrails = operation["x-guardrails"];
-    const shouldRetry = guardrails?.retry && guardrails.retry !== "none";
+    const shouldRetry =
+      guardrails?.retry && guardrails.retry.strategy !== "none";
     const maxRetries = Math.min(
-      guardrails?.maxRetries || 3,
+      guardrails?.retry?.maxRetries || 3,
       this.config.maxRetries || 3
     );
 

@@ -60,7 +60,8 @@ packages/*/node_modules/
 packages/*/.env
 
 # Evaluation outputs
-eval-results/
+eval-results*/
+packages/eval/eval-results*/
 metrics/
 reports/
 

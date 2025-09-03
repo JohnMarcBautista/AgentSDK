@@ -35,21 +35,22 @@ export function operationToOpenAITool(operation: Operation): OpenAITool {
     description += `. ${operation.description}`;
   }
 
-  // Add guardrails info to description
+  // Add minimal guardrails info to avoid token bloat
   const guardrails = operation["x-guardrails"];
   if (guardrails) {
     const hints: string[] = [];
 
-    if (guardrails.preconditions && guardrails.preconditions.length > 0) {
-      hints.push(`Preconditions: ${guardrails.preconditions.join(", ")}`);
+    // Only add the most critical information
+    if (guardrails.sideEffects && guardrails.sideEffects !== "read") {
+      hints.push(`${guardrails.sideEffects}`);
     }
 
-    if (guardrails.rateLimit) {
-      hints.push(`Rate limit: ${guardrails.rateLimit}`);
+    if (guardrails.rateLimit && guardrails.rateLimit.requests) {
+      hints.push(`${guardrails.rateLimit.requests}/${guardrails.rateLimit.window}`);
     }
 
     if (hints.length > 0) {
-      description += ` [${hints.join("; ")}]`;
+      description += ` [${hints.join(", ")}]`;
     }
   }
 
