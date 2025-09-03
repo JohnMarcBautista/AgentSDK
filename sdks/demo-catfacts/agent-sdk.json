@@ -1,0 +1,227 @@
+{
+  "name": "CatFacts",
+  "version": "0.1.0",
+  "baseUrl": "https://catfact.ninja",
+  "auth": {
+    "modes": ["none"]
+  },
+  "operations": [
+    {
+      "opId": "getRandomFact",
+      "summary": "Fetch a random cat fact",
+      "description": "Returns a single random cat fact with its character length",
+      "method": "GET",
+      "path": "/fact",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "fact": {
+            "type": "string",
+            "description": "The cat fact text"
+          },
+          "length": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Character length of the fact"
+          }
+        },
+        "required": ["fact", "length"],
+        "additionalProperties": false
+      },
+      "x-guardrails": {
+        "retry": "exponentialBackoff",
+        "timeout": 5000,
+        "maxRetries": 3
+      },
+      "x-errors": [
+        {
+          "code": "500",
+          "retryable": true,
+          "recoveryHint": "Server error, retry with exponential backoff",
+          "category": "server_error"
+        },
+        {
+          "code": "503",
+          "retryable": true,
+          "recoveryHint": "Service unavailable, retry after delay",
+          "category": "server_error"
+        }
+      ],
+      "x-examples": [
+        {
+          "name": "Typical response",
+          "input": {},
+          "output": {
+            "fact": "Cats have 32 muscles in each ear.",
+            "length": 32
+          },
+          "description": "Example of a typical random cat fact response"
+        }
+      ]
+    },
+    {
+      "opId": "listFacts",
+      "summary": "List multiple facts with pagination",
+      "description": "Returns a paginated list of cat facts with optional filtering by maximum length",
+      "method": "GET",
+      "path": "/facts",
+      "input": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 10,
+            "description": "Number of facts to return (1-100)"
+          },
+          "max_length": {
+            "type": "integer",
+            "minimum": 10,
+            "description": "Maximum character length for facts"
+          }
+        },
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "fact": {
+                  "type": "string",
+                  "description": "The cat fact text"
+                },
+                "length": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "Character length of the fact"
+                }
+              },
+              "required": ["fact", "length"],
+              "additionalProperties": false
+            }
+          },
+          "current_page": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Current page number"
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Total number of facts available"
+          }
+        },
+        "required": ["data"],
+        "additionalProperties": true
+      },
+      "x-guardrails": {
+        "preconditions": [
+          "limit must be between 1 and 100",
+          "max_length must be at least 10 if provided"
+        ],
+        "retry": "exponentialBackoff",
+        "timeout": 10000,
+        "maxRetries": 3
+      },
+      "x-errors": [
+        {
+          "code": "400",
+          "retryable": false,
+          "recoveryHint": "Check parameter values: limit (1-100), max_length (>=10)",
+          "category": "validation"
+        },
+        {
+          "code": "500",
+          "retryable": true,
+          "recoveryHint": "Server error, retry with exponential backoff",
+          "category": "server_error"
+        }
+      ],
+      "x-examples": [
+        {
+          "name": "Basic list request",
+          "input": {
+            "limit": 5
+          },
+          "output": {
+            "data": [
+              {
+                "fact": "Cats have 32 muscles in each ear.",
+                "length": 32
+              },
+              {
+                "fact": "A group of cats is called a clowder.",
+                "length": 35
+              }
+            ],
+            "current_page": 1,
+            "total": 314
+          },
+          "description": "Request for 5 facts without length filtering"
+        },
+        {
+          "name": "Filtered by length",
+          "input": {
+            "limit": 3,
+            "max_length": 50
+          },
+          "output": {
+            "data": [
+              {
+                "fact": "Cats sleep 12-16 hours per day.",
+                "length": 30
+              }
+            ],
+            "current_page": 1,
+            "total": 127
+          },
+          "description": "Request for facts with maximum 50 characters"
+        }
+      ]
+    }
+  ],
+  "x-usagePatterns": [
+    {
+      "name": "Fetch N long facts",
+      "description": "Get multiple long cat facts sorted by length",
+      "steps": [
+        "Call listFacts with limit=N and max_length=120",
+        "Sort facts by length desc",
+        "Return top N"
+      ],
+      "condition": "When you need longer, more detailed cat facts"
+    },
+    {
+      "name": "Random fact with fallback",
+      "description": "Get a random fact with fallback to list if single fact fails",
+      "steps": [
+        "Try getRandomFact first",
+        "If it fails, call listFacts with limit=1",
+        "Return the first fact from the list"
+      ],
+      "condition": "When you want a single fact but need reliability"
+    }
+  ],
+  "x-antiPatterns": [
+    "Requesting limit > 100 (API will reject)",
+    "Assuming /facts returns a single object instead of paginated data",
+    "Not handling empty data arrays in listFacts response",
+    "Setting max_length < 10 (too restrictive, may return no results)",
+    "Making rapid successive calls without respecting rate limits"
+  ],
+  "x-metadata": {
+    "source": "https://catfact.ninja",
+    "convertedAt": "2024-01-15T10:30:00Z",
+    "description": "Demo AgentSDK for Cat Facts API - used for testing and validation"
+  }
+}

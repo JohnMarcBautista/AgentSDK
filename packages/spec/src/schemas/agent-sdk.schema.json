@@ -1,0 +1,269 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-sdk.dev/schemas/agent-sdk.schema.json",
+  "title": "AgentSDK v0.1",
+  "description": "Agent-First SDK specification for optimized API consumption",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Human-readable name of the API"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+(-[a-zA-Z0-9-]+)?$",
+      "description": "Semantic version of the AgentSDK"
+    },
+    "baseUrl": {
+      "type": "string",
+      "format": "uri",
+      "description": "Base URL for all API operations"
+    },
+    "auth": {
+      "type": "object",
+      "description": "Authentication configuration",
+      "properties": {
+        "modes": {
+          "type": "array",
+          "items": {
+            "enum": ["none", "apiKey", "oauth2", "bearer"]
+          },
+          "description": "Supported authentication modes"
+        },
+        "headers": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Required authentication headers"
+        },
+        "apiKeyParam": {
+          "type": "string",
+          "description": "Parameter name for API key (query or header)"
+        },
+        "apiKeyLocation": {
+          "enum": ["header", "query"],
+          "description": "Where to place the API key"
+        }
+      },
+      "additionalProperties": false
+    },
+    "operations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/Operation"
+      },
+      "description": "Available API operations"
+    },
+    "x-usagePatterns": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/UsagePattern"
+      },
+      "description": "Common multi-step usage patterns"
+    },
+    "x-antiPatterns": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Common mistakes to avoid"
+    },
+    "x-metadata": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "type": "string",
+          "description": "Source of the original API specification"
+        },
+        "convertedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When this AgentSDK was generated"
+        },
+        "enrichedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When semantic enrichment was last applied"
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "required": ["name", "version", "operations"],
+  "additionalProperties": false,
+  
+  "$defs": {
+    "Operation": {
+      "type": "object",
+      "properties": {
+        "opId": {
+          "type": "string",
+          "pattern": "^[a-zA-Z][a-zA-Z0-9_]*$",
+          "description": "Unique operation identifier (camelCase)"
+        },
+        "summary": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Brief description for the agent"
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 1000,
+          "description": "Detailed operation description"
+        },
+        "method": {
+          "enum": ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
+          "description": "HTTP method"
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^/",
+          "description": "URL path with {param} placeholders"
+        },
+        "input": {
+          "type": "object",
+          "description": "JSON Schema for input parameters (query, path, body combined)"
+        },
+        "output": {
+          "type": "object", 
+          "description": "JSON Schema for successful response"
+        },
+        "x-guardrails": {
+          "$ref": "#/$defs/Guardrails"
+        },
+        "x-errors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ErrorPattern"
+          },
+          "description": "Known error patterns and recovery hints"
+        },
+        "x-examples": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Example"
+          },
+          "description": "Example inputs and outputs"
+        }
+      },
+      "required": ["opId", "method", "path", "input", "output"],
+      "additionalProperties": false
+    },
+    
+    "Guardrails": {
+      "type": "object",
+      "properties": {
+        "preconditions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Conditions that must be met before calling"
+        },
+        "rateLimit": {
+          "type": "string",
+          "pattern": "^\\d+/(second|minute|hour|day)$",
+          "description": "Rate limit specification"
+        },
+        "retry": {
+          "enum": ["none", "exponentialBackoff", "linearBackoff"],
+          "description": "Retry strategy for failures"
+        },
+        "timeout": {
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 300000,
+          "description": "Request timeout in milliseconds"
+        },
+        "maxRetries": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10,
+          "description": "Maximum number of retry attempts"
+        }
+      },
+      "additionalProperties": false
+    },
+    
+    "ErrorPattern": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "description": "Error code or HTTP status"
+        },
+        "message": {
+          "type": "string",
+          "description": "Error message pattern"
+        },
+        "retryable": {
+          "type": "boolean",
+          "description": "Whether this error should trigger a retry"
+        },
+        "recoveryHint": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Hint for recovering from this error"
+        },
+        "category": {
+          "enum": ["auth", "validation", "rate_limit", "server_error", "network", "not_found"],
+          "description": "Error category for handling logic"
+        }
+      },
+      "required": ["code"],
+      "additionalProperties": false
+    },
+    
+    "UsagePattern": {
+      "type": "object", 
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Pattern name"
+        },
+        "description": {
+          "type": "string",
+          "description": "What this pattern accomplishes"
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 2,
+          "description": "Sequence of operation IDs or descriptions"
+        },
+        "condition": {
+          "type": "string",
+          "description": "When to use this pattern"
+        }
+      },
+      "required": ["name", "steps"],
+      "additionalProperties": false
+    },
+    
+    "Example": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Example name"
+        },
+        "input": {
+          "description": "Example input parameters"
+        },
+        "output": {
+          "description": "Expected output"
+        },
+        "description": {
+          "type": "string",
+          "description": "What this example demonstrates"
+        }
+      },
+      "required": ["input", "output"],
+      "additionalProperties": false
+    }
+  }
+}

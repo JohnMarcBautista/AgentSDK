@@ -1,0 +1,32 @@
+{
+  "name": "@agent-sdk/enricher",
+  "version": "0.1.0",
+  "description": "LLM-powered semantic enhancement for AgentSDK",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "enrich-sdk": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "jest",
+    "clean": "rm -rf dist",
+    "dev": "ts-node src/cli.ts"
+  },
+  "dependencies": {
+    "@agent-sdk/spec": "*",
+    "openai": "^4.20.0",
+    "@anthropic-ai/sdk": "^0.9.0",
+    "commander": "^11.0.0",
+    "chalk": "^4.1.2",
+    "p-limit": "^4.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "jest": "^29.0.0",
+    "ts-node": "^10.9.0"
+  },
+  "files": ["dist/"],
+  "keywords": ["llm", "enrichment", "agent-sdk", "openai"],
+  "license": "MIT"
+}

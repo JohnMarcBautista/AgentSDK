@@ -1,0 +1,43 @@
+{
+  "name": "agent-sdk",
+  "version": "0.1.0",
+  "description": "Agent-First SDK architecture for optimized AI agent API consumption",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "test": "npm run test --workspaces",
+    "lint": "eslint packages/*/src --ext .ts,.tsx",
+    "format": "prettier --write packages/*/src/**/*.{ts,tsx,json}",
+    "clean": "npm run clean --workspaces",
+    "dev": "npm run dev --workspaces --if-present"
+  },
+  "devDependencies": {
+    "@types/node": "^18.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.0.0",
+    "prettier": "^3.0.0",
+    "typescript": "^5.0.0",
+    "jest": "^29.0.0",
+    "@types/jest": "^29.0.0",
+    "ts-jest": "^29.0.0"
+  },
+  "keywords": [
+    "ai-agent",
+    "sdk",
+    "api",
+    "tool-calling",
+    "llm",
+    "openai",
+    "mcp"
+  ],
+  "author": "AgentSDK Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/agentsdk/agent-sdk.git"
+  }
+}
